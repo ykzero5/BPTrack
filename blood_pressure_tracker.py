@@ -1,6 +1,3 @@
-# this handles: adding records, viewwing all records, finding a record,
-# updating a record, deleting a record, and filtering by person
-
 from blood_pressure_record import BloodPressureRecord
 
 
@@ -17,8 +14,10 @@ class BloodPressureTracker:
         diastolic,
         pulse_rate,
         notes,
-        date
+        date,
+        time
     ):
+
         record = BloodPressureRecord(
             record_id,
             person_id,
@@ -26,7 +25,8 @@ class BloodPressureTracker:
             diastolic,
             pulse_rate,
             notes,
-            date
+            date,
+            time
         )
 
         self.records.append(record)
@@ -51,9 +51,14 @@ class BloodPressureTracker:
         systolic,
         diastolic,
         pulse_rate,
-        notes
+        notes,
+        date,
+        time
     ):
-        record = self.find_record(record_id)
+
+        record = self.find_record(
+            record_id
+        )
 
         if record is None:
             return False
@@ -62,12 +67,16 @@ class BloodPressureTracker:
             systolic,
             diastolic,
             pulse_rate,
-            notes
+            notes,
+            date,
+            time
         )
 
     def delete_record(self, record_id):
 
-        record = self.find_record(record_id)
+        record = self.find_record(
+            record_id
+        )
 
         if record is None:
             return False

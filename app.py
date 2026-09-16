@@ -1,7 +1,8 @@
 import streamlit as st
-from datetime import date
+import pandas as pd
 
-from user import User
+from datetime import date, datetime
+
 from person import Person
 from blood_pressure_tracker import BloodPressureTracker
 from monthly_summary import MonthlySummary
@@ -22,16 +23,6 @@ st.set_page_config(
 # SESSION STATE
 # ==========================================
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if "user" not in st.session_state:
-    st.session_state.user = User(
-        1,
-        "admin",
-        "1234"
-    )
-
 if "people" not in st.session_state:
     st.session_state.people = []
 
@@ -46,15 +37,33 @@ tracker = st.session_state.tracker
 # HELPER FUNCTIONS
 # ==========================================
 
-def get_next_person_id():
+def get_person_name(person_id):
 
-    if not st.session_state.people:
-        return 1
+    for person in st.session_state.people:
 
-    return max(
-        person.person_id
-        for person in st.session_state.people
-    ) + 1
+        if person.person_id == person_id:
+            return person.get_name()
+
+    return "Unknown"
+
+
+def get_or_create_person(name):
+
+    name = name.strip()
+
+    for person in st.session_state.people:
+
+        if person.get_name().lower() == name.lower():
+            return person
+
+    person = Person(
+        len(st.session_state.people) + 1,
+        name
+    )
+
+    st.session_state.people.append(person)
+
+    return person
 
 
 def get_next_record_id():
@@ -70,16 +79,6 @@ def get_next_record_id():
     ) + 1
 
 
-def get_person_name(person_id):
-
-    for person in st.session_state.people:
-
-        if person.person_id == person_id:
-            return person.get_name()
-
-    return "Unknown"
-
-
 def show_bp_card(record):
 
     color = record.get_category_color()
@@ -93,7 +92,7 @@ def show_bp_card(record):
             border-radius:10px;
             margin-bottom:10px;
         ">
-            <b style="font-size:24px;">
+            <b style="font-size:25px;">
                 {record.get_summary()}
             </b>
             <br>
@@ -104,8 +103,38 @@ def show_bp_card(record):
     )
 
 
+def show_alert(record):
+
+    category = record.get_bp_category()
+
+    if category == "Elevated":
+
+        st.warning(
+            "⚠️ Elevated blood pressure reading detected."
+        )
+
+    elif category == "Stage 1 Hypertension":
+
+        st.warning(
+            "⚠️ Stage 1 hypertension range detected."
+        )
+
+    elif category == "Stage 2 Hypertension":
+
+        st.error(
+            "⚠️ Stage 2 hypertension range detected."
+        )
+
+    elif category == "Hypertensive Crisis":
+
+        st.error(
+            "🚨 Hypertensive crisis range detected. "
+            "This reading may require prompt medical attention."
+        )
+
+
 # ==========================================
-# TITLE
+# HEADER
 # ==========================================
 
 st.title("🫀 BPTrack")
@@ -116,753 +145,648 @@ st.caption(
 
 
 # ==========================================
-# LOGIN
+# NAVIGATION
 # ==========================================
 
-if not st.session_state.logged_in:
+menu = st.sidebar.radio(
+    "BPTrack Menu",
+    [
+        "Dashboard",
+        "Add Record",
+        "History",
+        "Monthly Summary"
+    ]
+)
 
-    st.subheader("Login")
+st.sidebar.divider()
 
-    username = st.text_input(
-        "Username"
-    )
-
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
-
-    if st.button(
-        "Login",
-        use_container_width=True
-    ):
-
-        if st.session_state.user.login(
-            username,
-            password
-        ):
-
-            st.session_state.logged_in = True
-            st.rerun()
-
-        else:
-
-            st.error(
-                "Invalid username or password."
-            )
-
-    st.info(
-        "Prototype Login: admin / 1234"
-    )
+st.sidebar.caption(
+    "Close the browser tab to exit BPTrack."
+)
 
 
 # ==========================================
-# MAIN APPLICATION
+# DASHBOARD
 # ==========================================
 
-else:
+if menu == "Dashboard":
 
-    menu = st.sidebar.radio(
-        "BPTrack Menu",
-        [
-            "Dashboard",
-            "Manage People",
-            "Add Record",
-            "View Records",
-            "Monthly Summary"
-        ]
+    st.header("Dashboard")
+
+    records = tracker.get_records()
+
+    col1, col2 = st.columns(2)
+
+    col1.metric(
+        "People Tracked",
+        len(st.session_state.people)
     )
 
-    st.sidebar.divider()
+    col2.metric(
+        "Total BP Records",
+        len(records)
+    )
 
-    if st.sidebar.button(
-        "Logout",
-        use_container_width=True
-    ):
+    st.divider()
 
-        st.session_state.user.logout()
+    st.subheader(
+        "Recent Blood Pressure Readings"
+    )
 
-        st.session_state.logged_in = False
+    if not records:
 
-        st.rerun()
-
-
-    # ======================================
-    # DASHBOARD
-    # ======================================
-
-    if menu == "Dashboard":
-
-        st.header("Dashboard")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric(
-            "People",
-            len(st.session_state.people)
+        st.info(
+            "No records yet. Select Add Record "
+            "from the menu to begin."
         )
 
-        col2.metric(
-            "BP Records",
-            len(tracker.get_records())
-        )
+    else:
 
-        if tracker.get_records():
+        recent_records = records[-5:]
 
-            latest = tracker.get_records()[-1]
+        recent_records.reverse()
 
-            col3.metric(
-                "Latest BP",
-                latest.get_summary()
-            )
+        for record in recent_records:
 
-            st.divider()
-
-            st.subheader(
-                "Latest Reading"
+            person_name = get_person_name(
+                record.person_id
             )
 
             st.write(
-                "**Person:**",
-                get_person_name(
-                    latest.person_id
-                )
+                f"### {person_name}"
             )
 
-            show_bp_card(latest)
+            show_bp_card(record)
 
-        else:
-
-            col3.metric(
-                "Latest BP",
-                "No Data"
+            st.caption(
+                f"{record.get_date()} "
+                f"at {record.get_time().strftime('%I:%M %p')}"
+                f" | Pulse: {record.get_pulse_rate()}"
             )
-
-            st.info(
-                "No blood pressure records yet."
-            )
-
-
-    # ======================================
-    # MANAGE PEOPLE
-    # ======================================
-
-    elif menu == "Manage People":
-
-        st.header(
-            "Manage People"
-        )
-
-        # ADD PERSON
-        st.subheader(
-            "Add Person"
-        )
-
-        name = st.text_input(
-            "Name"
-        )
-
-        if st.button(
-            "Add Person",
-            use_container_width=True
-        ):
-
-            name = name.strip()
-
-            if name == "":
-
-                st.error(
-                    "Please enter a name."
-                )
-
-            else:
-
-                duplicate = False
-
-                for person in st.session_state.people:
-
-                    if (
-                        person.get_name().lower()
-                        ==
-                        name.lower()
-                    ):
-
-                        duplicate = True
-
-                if duplicate:
-
-                    st.warning(
-                        "This person already exists."
-                    )
-
-                else:
-
-                    person = Person(
-                        get_next_person_id(),
-                        name
-                    )
-
-                    st.session_state.people.append(
-                        person
-                    )
-
-                    st.success(
-                        "Person added successfully."
-                    )
-
-                    st.rerun()
-
-
-        st.divider()
-
-
-        # DELETE PERSON
-        st.subheader(
-            "Current People"
-        )
-
-        if not st.session_state.people:
-
-            st.info(
-                "No people added yet."
-            )
-
-        else:
-
-            for person in st.session_state.people:
-
-                st.write(
-                    f"**{person.person_id}. "
-                    f"{person.get_name()}**"
-                )
 
             st.divider()
 
-            delete_names = [
-                person.get_name()
-                for person
-                in st.session_state.people
-            ]
 
-            person_to_delete = st.selectbox(
-                "Select Person to Delete",
-                delete_names
-            )
+# ==========================================
+# ADD RECORD
+# ==========================================
 
-            if st.button(
-                "Delete Person",
-                use_container_width=True
-            ):
+elif menu == "Add Record":
 
-                selected_person = None
+    st.header(
+        "Add Blood Pressure Record"
+    )
 
-                for person in (
-                    st.session_state.people
-                ):
+    person_name = st.text_input(
+        "Person's Name"
+    )
 
-                    if (
-                        person.get_name()
-                        ==
-                        person_to_delete
-                    ):
+    col1, col2 = st.columns(2)
 
-                        selected_person = person
-                        break
+    systolic = col1.number_input(
+        "Systolic Pressure (mmHg)",
+        min_value=1,
+        max_value=300,
+        value=120
+    )
 
-                if selected_person is not None:
+    diastolic = col2.number_input(
+        "Diastolic Pressure (mmHg)",
+        min_value=1,
+        max_value=200,
+        value=80
+    )
 
-                    person_id = (
-                        selected_person.person_id
-                    )
+    pulse_unavailable = st.checkbox(
+        "Pulse rate is unavailable"
+    )
 
-                    # Delete the person
-                    st.session_state.people.remove(
-                        selected_person
-                    )
+    if pulse_unavailable:
 
-                    # Delete their BP records too
-                    tracker.records = [
-                        record
-                        for record
-                        in tracker.get_records()
-                        if record.person_id
-                        != person_id
-                    ]
+        pulse_rate = "N/A"
 
-                    st.success(
-                        "Person and associated "
-                        "records deleted."
-                    )
+    else:
 
-                    st.rerun()
-
-
-    # ======================================
-    # ADD RECORD
-    # ======================================
-
-    elif menu == "Add Record":
-
-        st.header(
-            "Add Blood Pressure Record"
+        pulse_rate = st.number_input(
+            "Pulse Rate (bpm)",
+            min_value=1,
+            max_value=250,
+            value=70
         )
 
-        if not st.session_state.people:
+    record_date = st.date_input(
+        "Date",
+        value=date.today()
+    )
 
-            st.warning(
-                "Please add a person first."
+    record_time = st.time_input(
+        "Time",
+        value=datetime.now().time()
+    )
+
+    notes = st.text_area(
+        "Notes (Optional)"
+    )
+
+    if st.button(
+        "Save Blood Pressure Record",
+        use_container_width=True
+    ):
+
+        if person_name.strip() == "":
+
+            st.error(
+                "Please enter the person's name."
             )
 
         else:
 
-            people_names = [
-                person.get_name()
-                for person
-                in st.session_state.people
-            ]
-
-            selected_name = st.selectbox(
-                "Person",
-                people_names
+            person = get_or_create_person(
+                person_name
             )
 
-            selected_person = None
+            tracker.add_record(
+                get_next_record_id(),
+                person.person_id,
+                int(systolic),
+                int(diastolic),
+                pulse_rate,
+                notes,
+                record_date,
+                record_time
+            )
 
-            for person in (
-                st.session_state.people
+            record = tracker.get_records()[-1]
+
+            st.success(
+                "Blood pressure record saved successfully."
+            )
+
+            show_bp_card(record)
+
+            show_alert(record)
+
+            st.caption(
+                "Blood pressure categories are "
+                "for informational tracking only."
+            )
+
+
+# ==========================================
+# HISTORY
+# ==========================================
+
+elif menu == "History":
+
+    st.header(
+        "Blood Pressure History"
+    )
+
+    records = tracker.get_records()
+
+    if not records:
+
+        st.info(
+            "No blood pressure records available."
+        )
+
+    else:
+
+        search = st.text_input(
+            "Search or Filter by Person's Name"
+        )
+
+        matching_records = []
+
+        for record in records:
+
+            name = get_person_name(
+                record.person_id
+            )
+
+            if (
+                search.strip() == ""
+                or
+                search.lower()
+                in name.lower()
             ):
 
-                if (
-                    person.get_name()
-                    ==
-                    selected_name
-                ):
-
-                    selected_person = person
-
-
-            col1, col2 = st.columns(2)
-
-            systolic = col1.number_input(
-                "Systolic (mmHg)",
-                min_value=1,
-                max_value=300,
-                value=120
-            )
-
-            diastolic = col2.number_input(
-                "Diastolic (mmHg)",
-                min_value=1,
-                max_value=200,
-                value=80
-            )
-
-
-            pulse_na = st.checkbox(
-                "Pulse rate is unavailable"
-            )
-
-            if pulse_na:
-
-                pulse = "N/A"
-
-            else:
-
-                pulse = st.number_input(
-                    "Pulse Rate (bpm)",
-                    min_value=1,
-                    max_value=250,
-                    value=70
+                matching_records.append(
+                    record
                 )
 
+        if not matching_records:
 
-            record_date = st.date_input(
-                "Date",
-                value=date.today()
+            st.warning(
+                "No matching records found."
             )
 
-            notes = st.text_area(
-                "Notes"
+        for record in matching_records:
+
+            person_name = get_person_name(
+                record.person_id
             )
 
+            title = (
+                f"{person_name} | "
+                f"{record.get_summary()} | "
+                f"{record.get_date()}"
+            )
 
-            if st.button(
-                "Save Record",
-                use_container_width=True
-            ):
-
-                tracker.add_record(
-                    get_next_record_id(),
-                    selected_person.person_id,
-                    int(systolic),
-                    int(diastolic),
-                    pulse,
-                    notes,
-                    record_date
-                )
-
-                record = (
-                    tracker.get_records()[-1]
-                )
-
-                st.success(
-                    "Blood pressure record saved."
-                )
+            with st.expander(title):
 
                 show_bp_card(record)
 
-
-    # ======================================
-    # VIEW / EDIT / DELETE RECORDS
-    # ======================================
-
-    elif menu == "View Records":
-
-        st.header(
-            "Blood Pressure Records"
-        )
-
-        records = tracker.get_records()
-
-        if not records:
-
-            st.info(
-                "No records available."
-            )
-
-        else:
-
-            search = st.text_input(
-                "Search by Name"
-            )
-
-            for record in records.copy():
-
-                person_name = (
-                    get_person_name(
-                        record.person_id
-                    )
+                st.write(
+                    "**Pulse Rate:**",
+                    record.get_pulse_rate()
                 )
 
-                if (
-                    search == ""
-                    or
-                    search.lower()
-                    in person_name.lower()
-                ):
-
-                    with st.expander(
-                        f"{person_name} | "
-                        f"{record.get_summary()} | "
-                        f"{record.get_date()}"
-                    ):
-
-                        show_bp_card(record)
-
-                        st.write(
-                            "**Pulse:**",
-                            record.get_pulse_rate()
-                        )
-
-                        st.write(
-                            "**Date:**",
-                            record.get_date()
-                        )
-
-                        st.write(
-                            "**Notes:**",
-                            record.get_notes()
-                            or "No notes"
-                        )
-
-
-                        st.divider()
-
-                        st.write(
-                            "### Edit Record"
-                        )
-
-
-                        col1, col2 = (
-                            st.columns(2)
-                        )
-
-                        new_systolic = (
-                            col1.number_input(
-                                "Systolic",
-                                min_value=1,
-                                max_value=300,
-                                value=record.get_systolic(),
-                                key=f"sys_{record.record_id}"
-                            )
-                        )
-
-                        new_diastolic = (
-                            col2.number_input(
-                                "Diastolic",
-                                min_value=1,
-                                max_value=200,
-                                value=record.get_diastolic(),
-                                key=f"dia_{record.record_id}"
-                            )
-                        )
-
-
-                        current_pulse = (
-                            record.get_pulse_rate()
-                        )
-
-                        pulse_na = st.checkbox(
-                            "Pulse unavailable",
-                            value=(
-                                current_pulse == "N/A"
-                            ),
-                            key=f"na_{record.record_id}"
-                        )
-
-                        if pulse_na:
-
-                            new_pulse = "N/A"
-
-                        else:
-
-                            if isinstance(
-                                current_pulse,
-                                int
-                            ):
-                                default_pulse = (
-                                    current_pulse
-                                )
-
-                            else:
-                                default_pulse = 70
-
-                            new_pulse = (
-                                st.number_input(
-                                    "Pulse Rate",
-                                    min_value=1,
-                                    max_value=250,
-                                    value=default_pulse,
-                                    key=f"pulse_{record.record_id}"
-                                )
-                            )
-
-
-                        new_notes = st.text_area(
-                            "Notes",
-                            value=record.get_notes(),
-                            key=f"notes_{record.record_id}"
-                        )
-
-
-                        col1, col2 = (
-                            st.columns(2)
-                        )
-
-
-                        if col1.button(
-                            "Save Changes",
-                            key=f"edit_{record.record_id}",
-                            use_container_width=True
-                        ):
-
-                            tracker.update_record(
-                                record.record_id,
-                                int(new_systolic),
-                                int(new_diastolic),
-                                new_pulse,
-                                new_notes
-                            )
-
-                            st.success(
-                                "Record updated."
-                            )
-
-                            st.rerun()
-
-
-                        if col2.button(
-                            "Delete Record",
-                            key=f"delete_{record.record_id}",
-                            use_container_width=True
-                        ):
-
-                            tracker.delete_record(
-                                record.record_id
-                            )
-
-                            st.success(
-                                "Record deleted."
-                            )
-
-                            st.rerun()
-
-
-    # ======================================
-    # MONTHLY SUMMARY
-    # ======================================
-
-    elif menu == "Monthly Summary":
-
-        st.header(
-            "Monthly Statistics"
-        )
-
-        if not st.session_state.people:
-
-            st.info(
-                "No people available."
-            )
-
-        elif not tracker.get_records():
-
-            st.info(
-                "No records available."
-            )
-
-        else:
-
-            names = [
-                person.get_name()
-                for person
-                in st.session_state.people
-            ]
-
-            selected_name = st.selectbox(
-                "Person",
-                names
-            )
-
-
-            selected_person = None
-
-            for person in (
-                st.session_state.people
-            ):
-
-                if (
-                    person.get_name()
-                    ==
-                    selected_name
-                ):
-
-                    selected_person = person
-
-
-            col1, col2 = st.columns(2)
-
-            selected_month = col1.selectbox(
-                "Month",
-                list(range(1, 13)),
-                index=date.today().month - 1
-            )
-
-            selected_year = col2.number_input(
-                "Year",
-                min_value=2000,
-                max_value=2100,
-                value=date.today().year
-            )
-
-
-            person_records = (
-                tracker.search_by_person(
-                    selected_person.person_id
-                )
-            )
-
-
-            monthly_records = []
-
-            for record in person_records:
-
-                record_date = (
+                st.write(
+                    "**Date:**",
                     record.get_date()
                 )
 
-                if (
-                    record_date.month
-                    == selected_month
-                    and
-                    record_date.year
-                    == selected_year
-                ):
-
-                    monthly_records.append(
-                        record
+                st.write(
+                    "**Time:**",
+                    record.get_time().strftime(
+                        "%I:%M %p"
                     )
-
-
-            if not monthly_records:
-
-                st.info(
-                    "No records found for "
-                    "this person during the "
-                    "selected month."
                 )
 
-            else:
-
-                summary = MonthlySummary(
-                    monthly_records
+                st.write(
+                    "**Notes:**",
+                    record.get_notes()
+                    or "No notes"
                 )
-
-                st.subheader(
-                    f"{selected_name}'s Summary"
-                )
-
-                col1, col2, col3, col4 = (
-                    st.columns(4)
-                )
-
-                col1.metric(
-                    "Total Records",
-                    summary.get_total_records()
-                )
-
-                col2.metric(
-                    "Average Systolic",
-                    f"{summary.calculate_average_systolic():.1f}"
-                )
-
-                col3.metric(
-                    "Average Diastolic",
-                    f"{summary.calculate_average_diastolic():.1f}"
-                )
-
-                average_pulse = (
-                    summary.calculate_average_pulse()
-                )
-
-                if average_pulse == 0:
-                    pulse_display = "N/A"
-
-                else:
-                    pulse_display = (
-                        f"{average_pulse:.1f}"
-                    )
-
-                col4.metric(
-                    "Average Pulse",
-                    pulse_display
-                )
-
 
                 st.divider()
 
                 st.subheader(
-                    "Records"
+                    "Edit Record"
                 )
 
-                for record in monthly_records:
+                col1, col2 = st.columns(2)
 
-                    show_bp_card(record)
+                new_systolic = col1.number_input(
+                    "Systolic",
+                    min_value=1,
+                    max_value=300,
+                    value=record.get_systolic(),
+                    key=f"systolic_{record.record_id}"
+                )
 
-                    st.caption(
-                        f"{record.get_date()} | "
-                        f"Pulse: "
-                        f"{record.get_pulse_rate()}"
+                new_diastolic = col2.number_input(
+                    "Diastolic",
+                    min_value=1,
+                    max_value=200,
+                    value=record.get_diastolic(),
+                    key=f"diastolic_{record.record_id}"
+                )
+
+                current_pulse = (
+                    record.get_pulse_rate()
+                )
+
+                pulse_na = st.checkbox(
+                    "Pulse unavailable",
+                    value=current_pulse == "N/A",
+                    key=f"pulse_na_{record.record_id}"
+                )
+
+                if pulse_na:
+
+                    new_pulse = "N/A"
+
+                else:
+
+                    if isinstance(
+                        current_pulse,
+                        int
+                    ):
+
+                        pulse_default = (
+                            current_pulse
+                        )
+
+                    else:
+
+                        pulse_default = 70
+
+                    new_pulse = st.number_input(
+                        "Pulse Rate",
+                        min_value=1,
+                        max_value=250,
+                        value=pulse_default,
+                        key=f"pulse_{record.record_id}"
                     )
+
+                new_date = st.date_input(
+                    "Date",
+                    value=record.get_date(),
+                    key=f"date_{record.record_id}"
+                )
+
+                new_time = st.time_input(
+                    "Time",
+                    value=record.get_time(),
+                    key=f"time_{record.record_id}"
+                )
+
+                new_notes = st.text_area(
+                    "Notes",
+                    value=record.get_notes(),
+                    key=f"notes_{record.record_id}"
+                )
+
+                col1, col2 = st.columns(2)
+
+                if col1.button(
+                    "Save Changes",
+                    key=f"edit_{record.record_id}",
+                    use_container_width=True
+                ):
+
+                    tracker.update_record(
+                        record.record_id,
+                        int(new_systolic),
+                        int(new_diastolic),
+                        new_pulse,
+                        new_notes,
+                        new_date,
+                        new_time
+                    )
+
+                    st.success(
+                        "Record updated successfully."
+                    )
+
+                    st.rerun()
+
+                if col2.button(
+                    "Delete Record",
+                    key=f"delete_{record.record_id}",
+                    use_container_width=True
+                ):
+
+                    tracker.delete_record(
+                        record.record_id
+                    )
+
+                    st.success(
+                        "Record deleted."
+                    )
+
+                    st.rerun()
+
+
+# ==========================================
+# MONTHLY SUMMARY
+# ==========================================
+
+elif menu == "Monthly Summary":
+
+    st.header(
+        "Monthly Summary and Trends"
+    )
+
+    if not st.session_state.people:
+
+        st.info(
+            "No people have been recorded yet."
+        )
+
+    elif not tracker.get_records():
+
+        st.info(
+            "No blood pressure records available."
+        )
+
+    else:
+
+        names = [
+            person.get_name()
+            for person in st.session_state.people
+        ]
+
+        selected_name = st.selectbox(
+            "Person",
+            names
+        )
+
+        selected_person = None
+
+        for person in st.session_state.people:
+
+            if (
+                person.get_name()
+                ==
+                selected_name
+            ):
+
+                selected_person = person
+                break
+
+        col1, col2 = st.columns(2)
+
+        selected_month = col1.selectbox(
+            "Month",
+            list(range(1, 13)),
+            index=date.today().month - 1
+        )
+
+        selected_year = col2.number_input(
+            "Year",
+            min_value=2000,
+            max_value=2100,
+            value=date.today().year
+        )
+
+        person_records = (
+            tracker.search_by_person(
+                selected_person.person_id
+            )
+        )
+
+        monthly_records = []
+
+        for record in person_records:
+
+            if (
+                record.get_date().month
+                == selected_month
+                and
+                record.get_date().year
+                == selected_year
+            ):
+
+                monthly_records.append(
+                    record
+                )
+
+        monthly_records.sort(
+            key=lambda record: (
+                record.get_date(),
+                record.get_time()
+            )
+        )
+
+
+        if not monthly_records:
+
+            st.info(
+                "No records found for this person "
+                "during the selected month."
+            )
+
+        else:
+
+            summary = MonthlySummary(
+                monthly_records
+            )
+
+            st.subheader(
+                f"{selected_name}'s Monthly Summary"
+            )
+
+            col1, col2, col3, col4 = (
+                st.columns(4)
+            )
+
+            col1.metric(
+                "Total Records",
+                summary.get_total_records()
+            )
+
+            col2.metric(
+                "Average Systolic",
+                f"{summary.calculate_average_systolic():.1f} mmHg"
+            )
+
+            col3.metric(
+                "Average Diastolic",
+                f"{summary.calculate_average_diastolic():.1f} mmHg"
+            )
+
+            average_pulse = (
+                summary.calculate_average_pulse()
+            )
+
+            if average_pulse == 0:
+
+                pulse_text = "N/A"
+
+            else:
+
+                pulse_text = (
+                    f"{average_pulse:.1f} bpm"
+                )
+
+            col4.metric(
+                "Average Pulse",
+                pulse_text
+            )
+
+
+            # ==================================
+            # TREND
+            # ==================================
+
+            st.divider()
+
+            st.subheader(
+                "Blood Pressure Trend"
+            )
+
+            chart_data = []
+
+            for record in monthly_records:
+
+                reading_time = datetime.combine(
+                    record.get_date(),
+                    record.get_time()
+                )
+
+                chart_data.append(
+                    {
+                        "Date and Time": reading_time,
+                        "Systolic": record.get_systolic(),
+                        "Diastolic": record.get_diastolic()
+                    }
+                )
+
+            data_frame = pd.DataFrame(
+                chart_data
+            )
+
+            data_frame = data_frame.set_index(
+                "Date and Time"
+            )
+
+            st.line_chart(
+                data_frame
+            )
+
+
+            # ==================================
+            # LATEST CHANGE
+            # ==================================
+
+            if len(monthly_records) >= 2:
+
+                previous = monthly_records[-2]
+                latest = monthly_records[-1]
+
+                difference = (
+                    latest.get_systolic()
+                    -
+                    previous.get_systolic()
+                )
+
+                if difference > 0:
+
+                    st.info(
+                        f"↑ Latest systolic reading "
+                        f"increased by {difference} mmHg "
+                        f"from the previous reading."
+                    )
+
+                elif difference < 0:
+
+                    st.info(
+                        f"↓ Latest systolic reading "
+                        f"decreased by {abs(difference)} mmHg "
+                        f"from the previous reading."
+                    )
+
+                else:
+
+                    st.info(
+                        "→ Latest systolic reading "
+                        "has not changed from the "
+                        "previous reading."
+                    )
+
+
+            # ==================================
+            # RECORDS
+            # ==================================
+
+            st.divider()
+
+            st.subheader(
+                "Readings This Month"
+            )
+
+            for record in monthly_records:
+
+                show_bp_card(record)
+
+                st.caption(
+                    f"{record.get_date()} "
+                    f"{record.get_time().strftime('%I:%M %p')} "
+                    f"| Pulse: {record.get_pulse_rate()}"
+                )
 
 
 # ==========================================
@@ -872,6 +796,7 @@ else:
 st.divider()
 
 st.caption(
-    "BPTrack is for informational tracking "
-    "only and is not a medical diagnosis."
+    "BPTrack is a prototype for informational "
+    "blood pressure tracking and is not intended "
+    "to provide a medical diagnosis."
 )

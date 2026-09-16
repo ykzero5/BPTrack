@@ -8,7 +8,8 @@ class BloodPressureRecord:
         diastolic,
         pulse_rate,
         notes,
-        date
+        date,
+        time
     ):
         self.record_id = record_id
         self.person_id = person_id
@@ -19,6 +20,7 @@ class BloodPressureRecord:
         self._pulse_rate = pulse_rate
         self._notes = notes
         self._date = date
+        self._time = time
 
     def get_systolic(self):
         return self._systolic
@@ -35,12 +37,17 @@ class BloodPressureRecord:
     def get_date(self):
         return self._date
 
+    def get_time(self):
+        return self._time
+
     def update_record(
         self,
         systolic,
         diastolic,
         pulse_rate,
-        notes
+        notes,
+        date,
+        time
     ):
         if systolic <= 0 or diastolic <= 0:
             return False
@@ -49,11 +56,12 @@ class BloodPressureRecord:
         self._diastolic = diastolic
         self._pulse_rate = pulse_rate
         self._notes = notes
+        self._date = date
+        self._time = time
 
         return True
 
     def get_summary(self):
-
         return (
             f"{self._systolic}/"
             f"{self._diastolic} mmHg"
@@ -87,7 +95,7 @@ class BloodPressureRecord:
             return "green"
 
         elif category == "Elevated":
-            return "gold"
+            return "goldenrod"
 
         elif category == "Stage 1 Hypertension":
             return "orange"
