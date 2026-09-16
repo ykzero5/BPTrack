@@ -1,0 +1,27 @@
+Record ID: 1
+Person ID: 1
+Systolic: 115
+Diastolic: 75
+Pulse Rate: 72
+Date: 2026-09-16
+Time: 21:17:00
+Notes: first reading for the month
+
+Record ID: 2
+Person ID: 1
+Systolic: 128
+Diastolic: 84
+Pulse Rate: 79
+Date: 2026-09-16
+Time: 21:19:00
+Notes: (for example) evening reading
+
+Record ID: 4
+Person ID: 3
+Systolic: 145
+Diastolic: 92
+Pulse Rate: 82
+Date: 2026-09-16
+Time: 21:21:00
+Notes: after work
+
