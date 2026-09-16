@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from person import Person
 from blood_pressure_tracker import BloodPressureTracker
@@ -316,9 +317,11 @@ elif menu == "Add Record":
     )
 
     record_time = st.time_input(
-        "Time",
-        value=datetime.now().time()
-    )
+    "Time",
+    value=datetime.now(
+        ZoneInfo("Asia/Manila")
+    ).time()
+)
 
     notes = st.text_area(
         "Notes (Optional)"
