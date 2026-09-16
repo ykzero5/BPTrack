@@ -7,6 +7,8 @@ from person import Person
 from blood_pressure_tracker import BloodPressureTracker
 from monthly_summary import MonthlySummary
 
+import storage
+
 
 # ==========================================
 # PAGE SETTINGS
@@ -14,20 +16,26 @@ from monthly_summary import MonthlySummary
 
 st.set_page_config(
     page_title="BPTrack",
-    page_icon="🫀",
+    page_icon="❤️",
     layout="wide"
 )
 
 
 # ==========================================
-# SESSION STATE
+# LOAD SAVED DATA
 # ==========================================
 
 if "people" not in st.session_state:
-    st.session_state.people = []
+    st.session_state.people = storage.load_people()
+
 
 if "tracker" not in st.session_state:
-    st.session_state.tracker = BloodPressureTracker()
+
+    tracker = BloodPressureTracker()
+
+    tracker.records = storage.load_records()
+
+    st.session_state.tracker = tracker
 
 
 tracker = st.session_state.tracker
@@ -47,23 +55,15 @@ def get_person_name(person_id):
     return "Unknown"
 
 
-def get_or_create_person(name):
+def get_next_person_id():
 
-    name = name.strip()
+    if not st.session_state.people:
+        return 1
 
-    for person in st.session_state.people:
-
-        if person.get_name().lower() == name.lower():
-            return person
-
-    person = Person(
-        len(st.session_state.people) + 1,
-        name
-    )
-
-    st.session_state.people.append(person)
-
-    return person
+    return max(
+        person.person_id
+        for person in st.session_state.people
+    ) + 1
 
 
 def get_next_record_id():
@@ -77,6 +77,34 @@ def get_next_record_id():
         record.record_id
         for record in records
     ) + 1
+
+
+def get_or_create_person(name):
+
+    name = name.strip()
+
+    for person in st.session_state.people:
+
+        if (
+            person.get_name().lower()
+            == name.lower()
+        ):
+            return person
+
+    person = Person(
+        get_next_person_id(),
+        name
+    )
+
+    st.session_state.people.append(
+        person
+    )
+
+    storage.save_people(
+        st.session_state.people
+    )
+
+    return person
 
 
 def show_bp_card(record):
@@ -110,26 +138,30 @@ def show_alert(record):
     if category == "Elevated":
 
         st.warning(
-            "⚠️ Elevated blood pressure reading detected."
+            "⚠️ Elevated blood pressure "
+            "reading detected."
         )
 
     elif category == "Stage 1 Hypertension":
 
         st.warning(
-            "⚠️ Stage 1 hypertension range detected."
+            "⚠️ Stage 1 hypertension "
+            "range detected."
         )
 
     elif category == "Stage 2 Hypertension":
 
         st.error(
-            "⚠️ Stage 2 hypertension range detected."
+            "⚠️ Stage 2 hypertension "
+            "range detected."
         )
 
     elif category == "Hypertensive Crisis":
 
         st.error(
-            "🚨 Hypertensive crisis range detected. "
-            "This reading may require prompt medical attention."
+            "🚨 Hypertensive crisis range "
+            "detected. This reading may "
+            "require prompt medical attention."
         )
 
 
@@ -137,7 +169,7 @@ def show_alert(record):
 # HEADER
 # ==========================================
 
-st.title("🫀 BPTrack")
+st.title("❤️ BPTrack")
 
 st.caption(
     "Blood Pressure Tracking System"
@@ -171,7 +203,9 @@ st.sidebar.caption(
 
 if menu == "Dashboard":
 
-    st.header("Dashboard")
+    st.header(
+        "Dashboard"
+    )
 
     records = tracker.get_records()
 
@@ -202,9 +236,9 @@ if menu == "Dashboard":
 
     else:
 
-        recent_records = records[-5:]
-
-        recent_records.reverse()
+        recent_records = list(
+            reversed(records[-5:])
+        )
 
         for record in recent_records:
 
@@ -220,8 +254,10 @@ if menu == "Dashboard":
 
             st.caption(
                 f"{record.get_date()} "
-                f"at {record.get_time().strftime('%I:%M %p')}"
-                f" | Pulse: {record.get_pulse_rate()}"
+                f"at "
+                f"{record.get_time().strftime('%I:%M %p')} "
+                f"| Pulse: "
+                f"{record.get_pulse_rate()}"
             )
 
             st.divider()
@@ -316,10 +352,15 @@ elif menu == "Add Record":
                 record_time
             )
 
+            storage.save_records(
+                tracker.get_records()
+            )
+
             record = tracker.get_records()[-1]
 
             st.success(
-                "Blood pressure record saved successfully."
+                "Blood pressure record "
+                "saved successfully."
             )
 
             show_bp_card(record)
@@ -367,8 +408,7 @@ elif menu == "History":
             if (
                 search.strip() == ""
                 or
-                search.lower()
-                in name.lower()
+                search.lower() in name.lower()
             ):
 
                 matching_records.append(
@@ -433,7 +473,10 @@ elif menu == "History":
                     min_value=1,
                     max_value=300,
                     value=record.get_systolic(),
-                    key=f"systolic_{record.record_id}"
+                    key=(
+                        f"systolic_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 new_diastolic = col2.number_input(
@@ -441,7 +484,10 @@ elif menu == "History":
                     min_value=1,
                     max_value=200,
                     value=record.get_diastolic(),
-                    key=f"diastolic_{record.record_id}"
+                    key=(
+                        f"diastolic_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 current_pulse = (
@@ -450,8 +496,13 @@ elif menu == "History":
 
                 pulse_na = st.checkbox(
                     "Pulse unavailable",
-                    value=current_pulse == "N/A",
-                    key=f"pulse_na_{record.record_id}"
+                    value=(
+                        current_pulse == "N/A"
+                    ),
+                    key=(
+                        f"pulse_na_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 if pulse_na:
@@ -478,36 +529,51 @@ elif menu == "History":
                         min_value=1,
                         max_value=250,
                         value=pulse_default,
-                        key=f"pulse_{record.record_id}"
+                        key=(
+                            f"pulse_"
+                            f"{record.record_id}"
+                        )
                     )
 
                 new_date = st.date_input(
                     "Date",
                     value=record.get_date(),
-                    key=f"date_{record.record_id}"
+                    key=(
+                        f"date_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 new_time = st.time_input(
                     "Time",
                     value=record.get_time(),
-                    key=f"time_{record.record_id}"
+                    key=(
+                        f"time_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 new_notes = st.text_area(
                     "Notes",
                     value=record.get_notes(),
-                    key=f"notes_{record.record_id}"
+                    key=(
+                        f"notes_"
+                        f"{record.record_id}"
+                    )
                 )
 
                 col1, col2 = st.columns(2)
 
                 if col1.button(
                     "Save Changes",
-                    key=f"edit_{record.record_id}",
+                    key=(
+                        f"edit_"
+                        f"{record.record_id}"
+                    ),
                     use_container_width=True
                 ):
 
-                    tracker.update_record(
+                    success = tracker.update_record(
                         record.record_id,
                         int(new_systolic),
                         int(new_diastolic),
@@ -517,27 +583,42 @@ elif menu == "History":
                         new_time
                     )
 
-                    st.success(
-                        "Record updated successfully."
-                    )
+                    if success:
 
-                    st.rerun()
+                        storage.save_records(
+                            tracker.get_records()
+                        )
+
+                        st.success(
+                            "Record updated successfully."
+                        )
+
+                        st.rerun()
 
                 if col2.button(
                     "Delete Record",
-                    key=f"delete_{record.record_id}",
+                    key=(
+                        f"delete_"
+                        f"{record.record_id}"
+                    ),
                     use_container_width=True
                 ):
 
-                    tracker.delete_record(
+                    success = tracker.delete_record(
                         record.record_id
                     )
 
-                    st.success(
-                        "Record deleted."
-                    )
+                    if success:
 
-                    st.rerun()
+                        storage.save_records(
+                            tracker.get_records()
+                        )
+
+                        st.success(
+                            "Record deleted."
+                        )
+
+                        st.rerun()
 
 
 # ==========================================
@@ -580,8 +661,7 @@ elif menu == "Monthly Summary":
 
             if (
                 person.get_name()
-                ==
-                selected_name
+                == selected_name
             ):
 
                 selected_person = person
@@ -599,7 +679,8 @@ elif menu == "Monthly Summary":
             "Year",
             min_value=2000,
             max_value=2100,
-            value=date.today().year
+            value=date.today().year,
+            step=1
         )
 
         person_records = (
@@ -631,12 +712,11 @@ elif menu == "Monthly Summary":
             )
         )
 
-
         if not monthly_records:
 
             st.info(
-                "No records found for this person "
-                "during the selected month."
+                "No records found for this "
+                "person during the selected month."
             )
 
         else:
@@ -660,12 +740,18 @@ elif menu == "Monthly Summary":
 
             col2.metric(
                 "Average Systolic",
-                f"{summary.calculate_average_systolic():.1f} mmHg"
+                (
+                    f"{summary.calculate_average_systolic():.1f} "
+                    f"mmHg"
+                )
             )
 
             col3.metric(
                 "Average Diastolic",
-                f"{summary.calculate_average_diastolic():.1f} mmHg"
+                (
+                    f"{summary.calculate_average_diastolic():.1f} "
+                    f"mmHg"
+                )
             )
 
             average_pulse = (
@@ -689,8 +775,8 @@ elif menu == "Monthly Summary":
 
 
             # ==================================
-            # TREND
-            # ==================================
+            # TREND CHART
+            # ==========================================
 
             st.divider()
 
@@ -702,35 +788,42 @@ elif menu == "Monthly Summary":
 
             for record in monthly_records:
 
-                reading_time = datetime.combine(
-                    record.get_date(),
-                    record.get_time()
+                reading_datetime = (
+                    datetime.combine(
+                        record.get_date(),
+                        record.get_time()
+                    )
                 )
 
                 chart_data.append(
                     {
-                        "Date and Time": reading_time,
-                        "Systolic": record.get_systolic(),
-                        "Diastolic": record.get_diastolic()
+                        "Date and Time":
+                            reading_datetime,
+
+                        "Systolic":
+                            record.get_systolic(),
+
+                        "Diastolic":
+                            record.get_diastolic()
                     }
                 )
 
-            data_frame = pd.DataFrame(
+            chart_df = pd.DataFrame(
                 chart_data
             )
 
-            data_frame = data_frame.set_index(
+            chart_df = chart_df.set_index(
                 "Date and Time"
             )
 
             st.line_chart(
-                data_frame
+                chart_df
             )
 
 
             # ==================================
-            # LATEST CHANGE
-            # ==================================
+            # LATEST TREND
+            # ==========================================
 
             if len(monthly_records) >= 2:
 
@@ -755,7 +848,8 @@ elif menu == "Monthly Summary":
 
                     st.info(
                         f"↓ Latest systolic reading "
-                        f"decreased by {abs(difference)} mmHg "
+                        f"decreased by "
+                        f"{abs(difference)} mmHg "
                         f"from the previous reading."
                     )
 
@@ -769,8 +863,8 @@ elif menu == "Monthly Summary":
 
 
             # ==================================
-            # RECORDS
-            # ==================================
+            # MONTHLY RECORDS
+            # ==========================================
 
             st.divider()
 
@@ -784,8 +878,10 @@ elif menu == "Monthly Summary":
 
                 st.caption(
                     f"{record.get_date()} "
+                    f"at "
                     f"{record.get_time().strftime('%I:%M %p')} "
-                    f"| Pulse: {record.get_pulse_rate()}"
+                    f"| Pulse: "
+                    f"{record.get_pulse_rate()}"
                 )
 
 
