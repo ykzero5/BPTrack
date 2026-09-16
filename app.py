@@ -17,7 +17,7 @@ import storage
 
 st.set_page_config(
     page_title="BPTrack",
-    page_icon="❤️",
+    page_icon="🫀",
     layout="wide"
 )
 
@@ -170,7 +170,7 @@ def show_alert(record):
 # HEADER
 # ==========================================
 
-st.title("❤️ BPTrack")
+st.title("🫀 BPTrack")
 
 st.caption(
     "Blood Pressure Tracking System"
